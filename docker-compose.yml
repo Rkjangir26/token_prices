@@ -1,0 +1,29 @@
+version: '3.8'
+services:
+  app:
+    image: node:18
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      - MORALIS_API_KEY=${MORALIS_API_KEY}
+      - DATABASE_URL=postgres://postgres:123456789@postgres:5432/pricetraker
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+    command: npm run dev
+  
+  postgres:
+    image: postgres:13
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=123456789
+      - POSTGRES_DB=pricetraker
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
