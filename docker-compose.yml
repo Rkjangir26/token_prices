@@ -1,29 +1,28 @@
-version: '3.8'
+version: '3.9'
+
 services:
   app:
-    image: node:18
-    working_dir: /app
-    volumes:
-      - .:/app
+    build: .
     environment:
-      - MORALIS_API_KEY=${MORALIS_API_KEY}
-      - DATABASE_URL=postgres://postgres:123456789@postgres:5432/pricetraker
-    ports:
-      - "3000:3000"
+      - DATABASE_URL=postgres://postgres:123456789@postgres:5432/pricetraker  # Update to match PostgreSQL credentials
     depends_on:
       - postgres
-    command: npm run dev
-  
+    ports:
+      - "3000:3000"
+    networks:
+      - blockchain-net
+
   postgres:
-    image: postgres:13
+    image: postgres:13  # Use version 13 to match the data directory initialization
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=123456789
-      - POSTGRES_DB=pricetraker
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456789
+      POSTGRES_DB: pricetraker
     ports:
       - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - blockchain-net
 
-volumes:
-  postgres_data:
+networks:
+  blockchain-net:
+    driver: bridge
