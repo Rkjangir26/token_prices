@@ -16,100 +16,98 @@ async function initializeMoralis() {
     }
 }
 
-// PostgreSQL client setup
+// PostgreSQL client setup with connection checkpoint
 const client = new Client({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: process.env.DATABASE_URL, // Ensure you have the DATABASE_URL in your .env
 });
 let isConnected = false;
-
-// Function to create the table if it doesn't exist
-async function createTableIfNotExists() {
-    const query = `
-        CREATE TABLE IF NOT EXISTS token_prices (
-            id SERIAL PRIMARY KEY,
-            token VARCHAR(10) NOT NULL,
-            price NUMERIC(20, 10) NOT NULL,
-            last_update TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-        );
-    `;
-    await client.query(query);
-    console.log("✅ Table 'token_prices' verified or created successfully.");
-}
-
-// Connect to PostgreSQL database
 async function connectToDatabase() {
     if (!isConnected) {
         await client.connect();
+
+        // Create necessary tables if they don't exist
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS public.token_prices (
+                id SERIAL PRIMARY KEY,
+                token VARCHAR(10) NOT NULL,
+                price NUMERIC(20, 10) NOT NULL,
+                last_update TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS public.alerts (
+                id SERIAL PRIMARY KEY,
+                chain VARCHAR(255) NOT NULL,
+                dollar DECIMAL(10, 2) NOT NULL,
+                email VARCHAR(255) NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
         isConnected = true;
         console.log("✅ Connected to PostgreSQL successfully.");
-        console.log(`Connected to database: ${process.env.DATABASE_URL}`);
-        await createTableIfNotExists();
+    }
+}
+
+// Function to send email alerts
+async function sendEmailAlert(token: string, newPrice: number, oldPrice: number) {
+    const transporter = nodemailer.createTransport({
+        service: 'Gmail',
+        auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS
+        }
+    });
+
+    const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: 'ravijangir741@gmail.com', // Replace with actual recipient email
+        subject: `Price Alert: ${token}`,
+        text: `The price of ${token} has changed from ${oldPrice} to ${newPrice}.`
+    };
+
+    await transporter.sendMail(mailOptions);
+}
+
+// Function to check for price increases
+async function checkPriceIncrease(token: string, newPrice: number) {
+    const result = await client.query(
+        'SELECT price FROM public.token_prices WHERE token = $1 ORDER BY last_update DESC LIMIT 1', [token]
+    );
+
+    if (result.rows.length > 0) {
+        const oldPrice = result.rows[0].price;
+        if (newPrice > oldPrice) {
+            await sendEmailAlert(token, newPrice, oldPrice);
+        }
     }
 }
 
 // Function to save prices in the database with confirmation logs
 async function savePrices(ethPrice: number, maticPrice: number) {
     try {
+        // Ensure client is connected
         await connectToDatabase();
 
-        console.log("Inserting prices:", { ethPrice, maticPrice });
+        // Insert both prices dynamically into the database and log inserted data
+        await client.query('INSERT INTO public.token_prices (token, price) VALUES ($1, $2)', ['ETH', ethPrice]);
+        await client.query('INSERT INTO public.token_prices (token, price) VALUES ($1, $2)', ['MATIC', maticPrice]);
 
-        const result = await client.query(
-            'INSERT INTO token_prices (token, price) VALUES ($1, $2), ($3, $4) RETURNING *',
-            ['ETH', ethPrice, 'MATIC', maticPrice]
-        );
+        // Check for price increases and send alerts
+        await checkPriceIncrease('ETH', ethPrice);
+        await checkPriceIncrease('MATIC', maticPrice);
 
-        console.log("✅ Prices saved to database:", result.rows);
+        console.log("✅ Prices saved to database");
     } catch (error) {
         console.error('❌ Error saving prices to PostgreSQL:', error);
     }
 }
 
-// Function to send email notification
-async function sendEmailAlert(token: string, newPrice: number, oldPrice: number) {
-    const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASS,
-        },
-    });
-
-    const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to: 'ravijalodiya741@gmail.com',
-        subject: `Price Alert: ${token} Price Increased`,
-        text: `The price of ${token} has increased from $${oldPrice.toFixed(2)} to $${newPrice.toFixed(2)}.`
-    };
-
-    try {
-        await transporter.sendMail(mailOptions);
-        console.log(`✅ Email alert sent for ${token}: Price increased from $${oldPrice} to $${newPrice}`);
-    } catch (error) {
-        console.error('❌ Error sending email:', error);
-    }
-}
-
-// Function to check for price increases
-async function checkPriceIncrease(token: string, newPrice: number) {
-    const result = await client.query(
-        'SELECT price FROM token_prices WHERE token = $1 ORDER BY last_update DESC LIMIT 1',
-        [token]
-    );
-
-    if (result.rows.length > 0) {
-        const oldPrice = parseFloat(result.rows[0].price);
-        // const percentageChange = ((newPrice - oldPrice) / oldPrice) * 100;
-
-        if (newPrice != oldPrice) { // Check if the price increased by more than 0.1%
-            await sendEmailAlert(token, newPrice, oldPrice);
-        }
-    }
-}
-
 // Schedule the task every 5 minutes
-cron.schedule('*/5 * * * *', async () => {
+cron.schedule('*/1 * * * *', async () => {
     try {
+        // Initialize Moralis and connect to the database if needed
         await initializeMoralis();
 
         const response = await Moralis.EvmApi.token.getMultipleTokenPrices(
@@ -130,10 +128,7 @@ cron.schedule('*/5 * * * *', async () => {
 
         if (ethUsdPrice && maticUsdPrice) {
             await savePrices(ethUsdPrice, maticUsdPrice);
-            console.log(`✅ Saved ETH: ${ethUsdPrice}, MATIC: ${maticUsdPrice}`);
-
-            await checkPriceIncrease('ETH', ethUsdPrice);
-            await checkPriceIncrease('MATIC', maticUsdPrice);
+            console.log(`✅ Saved ETH: ${ethUsdPrice}, MATIC: ${ethUsdPrice}`);
         } else {
             console.error('❌ Failed to fetch valid price data.');
         }
@@ -142,38 +137,7 @@ cron.schedule('*/5 * * * *', async () => {
     }
 });
 
-// Function to get hourly prices for the last 24 hours
-async function getHourlyPrices() {
-    const query = `
-        SELECT 
-            token,
-            DATE_TRUNC('hour', last_update) AS hour,
-            AVG(price) AS avg_price
-        FROM 
-            token_prices
-        WHERE 
-            last_update >= NOW() - INTERVAL '24 HOURS'
-        GROUP BY 
-            token, hour
-        ORDER BY 
-            hour DESC;
-    `;
-    const result = await client.query(query);
-    return result.rows;
-}
-
-// API Route Handler for hourly prices and other operations
+// API Route Handler
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-    if (req.method === 'GET' && req.query.type === 'hourlyPrices') {
-        try {
-            await connectToDatabase();
-            const hourlyPrices = await getHourlyPrices();
-            res.status(200).json(hourlyPrices);
-        } catch (error) {
-            console.error('Error fetching hourly prices:', error);
-            res.status(500).json({ error: 'Error fetching hourly prices' });
-        }
-    } else {
-        res.status(200).json({ message: 'Scheduler is running' });
-    }
+    res.status(200).json({ message: 'Scheduler is running' });
 }
