@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base theme variables */
+:root {
+  --bg: #0f1724; /* slate-900 */
+  --panel: #0b1220; /* darker panel */
+  --muted: #94a3b8; /* slate-400 */
+  --accent: #6366f1; /* indigo-500 */
+  --success: #10b981;
+  --danger: #ef4444;
+  --card: rgba(255,255,255,0.03);
+  --glass: rgba(255,255,255,0.03);
+}
+
+html, body, #__next {
+  height: 100%;
+}
+
+body {
+  background: linear-gradient(180deg, #071127 0%, #0b1220 100%);
+  color: #e6eef8;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Utility: modern card with subtle glass effect */
+.modern-card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border: 1px solid rgba(255,255,255,0.04);
+  box-shadow: 0 6px 18px rgba(2,6,23,0.6);
+  border-radius: 0.75rem;
+}
+
+.muted { color: var(--muted); }
+.accent { color: var(--accent); }
+.btn-primary { background: linear-gradient(90deg,var(--accent),#4f46e5); color: white; padding: .5rem .9rem; border-radius: .5rem; }
+
+/* Table styles for the dashboard */
+.dash-table thead th { color: #9aa7bf; font-weight: 600; font-size: .9rem; }
+.dash-table tbody tr { border-bottom: 1px solid rgba(255,255,255,0.03); }
+.dash-table td { padding: 0.9rem 0.5rem; }
+
+/* Responsive tweaks */
+@media (max-width: 768px) {
+  .hide-sm { display: none; }
+}

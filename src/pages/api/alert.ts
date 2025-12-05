@@ -12,28 +12,29 @@ async function connectToDatabase() {
     // Create necessary tables if they don't exist
     await client.query(`
         CREATE TABLE IF NOT EXISTS public.alerts (
-            id SERIAL PRIMARY KEY,
-            chain VARCHAR(255) NOT NULL,
-            dollar DECIMAL(10, 2) NOT NULL,
-            email VARCHAR(255) NOT NULL,
-            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-        );
+                id SERIAL PRIMARY KEY,
+                chain VARCHAR(255),
+                token_address VARCHAR(255),
+                dollar DECIMAL(10, 2) NOT NULL,
+                email VARCHAR(255) NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
     `);
 }
 
-async function setAlert(chain: string, dollar: number, email: string) {
+async function setAlert(chain: string, dollar: number, email: string, token_address?: string) {
     await connectToDatabase();
-    await client.query(`
-        INSERT INTO public.alerts (chain, dollar, email)
-        VALUES ($1, $2, $3)
-    `, [chain, dollar, email]);
+    await client.query(
+        `INSERT INTO public.alerts (chain, token_address, dollar, email) VALUES ($1, $2, $3, $4)`,
+        [chain || null, token_address || null, dollar, email]
+    );
     await client.end();
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-    const { chain, dollar, email } = req.body;
+    const { chain, dollar, email, token_address } = req.body;
     try {
-        await setAlert(chain, dollar, email);
+        await setAlert(chain, dollar, email, token_address);
         res.status(200).json({ message: 'Alert set successfully' });
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {

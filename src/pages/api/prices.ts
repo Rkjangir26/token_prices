@@ -44,7 +44,8 @@ async function connectToDatabase() {
         await client.query(`
             CREATE TABLE IF NOT EXISTS public.alerts (
                 id SERIAL PRIMARY KEY,
-                chain VARCHAR(255) NOT NULL,
+                chain VARCHAR(255),
+                token_address VARCHAR(255),
                 dollar DECIMAL(10, 2) NOT NULL,
                 email VARCHAR(255) NOT NULL,
                 created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
