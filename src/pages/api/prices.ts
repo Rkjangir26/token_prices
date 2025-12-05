@@ -6,14 +6,20 @@ import nodemailer from 'nodemailer';
 
 // Initialize Moralis only once
 let isMoralisInitialized = false;
+// Initialize Moralis only if api key is present. Returns true when initialized.
 async function initializeMoralis() {
-    if (!isMoralisInitialized) {
-        await Moralis.start({
-            apiKey: process.env.MORALIS_API_KEY || '',
-        });
-        isMoralisInitialized = true;
-        console.log("✅ Moralis initialized successfully.");
+    if (isMoralisInitialized) return true;
+
+    const apiKey = process.env.MORALIS_API_KEY;
+    if (!apiKey) {
+        console.error('❌ MORALIS_API_KEY is not set. Please add it to .env.local or export it.');
+        return false;
     }
+
+    await Moralis.start({ apiKey });
+    isMoralisInitialized = true;
+    console.log('✅ Moralis initialized successfully.');
+    return true;
 }
 
 // PostgreSQL client setup with connection checkpoint
@@ -53,21 +59,37 @@ async function connectToDatabase() {
 // Function to send email alerts
 async function sendEmailAlert(token: string, newPrice: number, oldPrice: number) {
     const transporter = nodemailer.createTransport({
-        service: 'Gmail',
+        host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+        port: Number(process.env.EMAIL_PORT || 587),
+        secure: process.env.EMAIL_SECURE === 'true' || false,
         auth: {
             user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASS
-        }
+            pass: process.env.EMAIL_PASS,
+        },
     });
 
     const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to: 'ravijangir741@gmail.com', // Replace with actual recipient email
+        from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+        to: process.env.ALERT_RECIPIENT,
         subject: `Price Alert: ${token}`,
-        text: `The price of ${token} has changed from ${oldPrice} to ${newPrice}.`
+        text: `The price of ${token} has changed from ${oldPrice} to ${newPrice}.`,
     };
 
-    await transporter.sendMail(mailOptions);
+    try {
+        // Verify transporter (will throw early if auth is incorrect)
+        await transporter.verify();
+        const info = await transporter.sendMail(mailOptions);
+        console.log(`✅ Email sent: token=${token} to=${mailOptions.to} messageId=${info.messageId}`);
+        // If using Ethereal, print preview URL
+        try {
+            const preview = nodemailer.getTestMessageUrl(info);
+            if (preview) console.log(`🔍 Preview URL: ${preview}`);
+        } catch (e) {
+            // ignore preview errors
+        }
+    } catch (err) {
+        console.error(`❌ Email send failed for token=${token} to=${mailOptions.to}:`, err);
+    }
 }
 
 // Function to check for price increases
@@ -108,7 +130,8 @@ async function savePrices(ethPrice: number, maticPrice: number) {
 cron.schedule('*/1 * * * *', async () => {
     try {
         // Initialize Moralis and connect to the database if needed
-        await initializeMoralis();
+        const moralisOk = await initializeMoralis();
+        if (!moralisOk) return; // skip this run until api key is provided
 
         const response = await Moralis.EvmApi.token.getMultipleTokenPrices(
             { chain: '0x1' },

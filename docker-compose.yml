@@ -3,8 +3,8 @@ version: '3.9'
 services:
   app:
     build: .
-    environment:
-      - DATABASE_URL=postgres://postgres:123456789@postgres:5432/pricetraker  # Update to match PostgreSQL credentials
+    env_file:
+      - .env
     depends_on:
       - postgres
     ports:
@@ -13,16 +13,22 @@ services:
       - blockchain-net
 
   postgres:
-    image: postgres:13  # Use version 13 to match the data directory initialization
+    image: postgres:16
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 123456789
-      POSTGRES_DB: pricetraker
+      POSTGRES_PASSWORD: postgrespwd
+      POSTGRES_DB: postgres
     ports:
-      - "5432:5432"
+      - "5433:5432" # map container 5432 to host 5433 to avoid local conflicts
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
     networks:
       - blockchain-net
 
 networks:
   blockchain-net:
     driver: bridge
+
+volumes:
+  postgres-data:
+    driver: local
